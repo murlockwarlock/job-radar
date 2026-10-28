@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: jobradar
+          POSTGRES_USER: jobradar
+          POSTGRES_PASSWORD: jobradar
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U jobradar -d jobradar"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s --health-timeout 3s --health-retries 20
+    env:
+      DATABASE_URL: postgresql+asyncpg://jobradar:jobradar@localhost:5432/jobradar
+      DATABASE_SYNC_URL: postgresql+psycopg2://jobradar:jobradar@localhost:5432/jobradar
+      REDIS_URL: redis://localhost:6379/0
+      CELERY_RESULT_BACKEND: redis://localhost:6379/1
+      TELEGRAM_POLLING_ENABLED: "false"
+      HH_USER_AGENT: ci/job-radar (ci@example.com)
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.11.33"
+      - run: uv sync
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy app
+      - run: uv run alembic upgrade head
+      - run: uv run python -m pytest
