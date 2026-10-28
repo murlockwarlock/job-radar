@@ -218,7 +218,7 @@ async def run_profile(profile_id: uuid.UUID, run_id: uuid.UUID | None = None) ->
                 async for dto in provider.search(profile):
                     fetched += 1
                     try:
-                        vacancy, is_new, _changed = await upsert_vacancy(session, dto)
+                        vacancy, is_new, changed = await upsert_vacancy(session, dto)
                         result = filter_engine.evaluate(vacancy, profile)
                         is_baseline = profile.baseline_completed_at is None
                         match = await session.scalar(
@@ -227,6 +227,7 @@ async def run_profile(profile_id: uuid.UUID, run_id: uuid.UUID | None = None) ->
                                 MatchResult.search_profile_id == profile.id,
                             )
                         )
+                        was_matched = match.matched if match is not None else None
                         if match is None:
                             match = MatchResult(
                                 vacancy_id=vacancy.id,
@@ -252,7 +253,7 @@ async def run_profile(profile_id: uuid.UUID, run_id: uuid.UUID | None = None) ->
                             profile.notification_enabled,
                             is_baseline,
                             settings.send_notifications_on_initial_sync,
-                        ):
+                        ) and (is_new or (changed and was_matched is False)):
                             recipient = (
                                 str(settings.telegram_admin_chat_id)
                                 if settings.telegram_admin_chat_id
